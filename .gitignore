@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+*.log
+bot.log
+.env
+articles/
+photos/
+processed_topics.json
+start.bat
+start.sh

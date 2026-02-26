@@ -4,14 +4,14 @@
 """
 
 # ─── Claude / Anthropic API ───────────────────────────────────────────────────
-ANTHROPIC_API_KEY = "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"
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
 # ─── VC.RU (Osnova) ───────────────────────────────────────────────────────────
 # Как получить токен:
 #  1. Войдите на vc.ru в браузере
 #  2. Откройте DevTools → Network → любой запрос к api.vc.ru
 #  3. Скопируйте значение заголовка X-Device-Token
-VC_TOKEN = "SliUKGUm9TIMLtZm8v4ZxXbFG-qyJGv1jjtARLAo"
+VC_TOKEN = os.environ.get("VC_TOKEN", "")
 VC_BASE_URL = "https://api.vc.ru/v2.8"
 VC_SUBSITE_ID = None   # None = личный блог. Для компании — ID субсайта (число)
 

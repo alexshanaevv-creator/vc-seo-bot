@@ -188,10 +188,13 @@ class VcPublisher:
             )
             return entry
         except Exception as e:
-            logger.error(f"create_entry failed: {e}")
+            api_response = ""
             if hasattr(e, "response") and e.response is not None:
-                logger.error(f"Response: {e.response.text[:500]}")
-            return None
+                api_response = e.response.text[:500]
+                logger.error(f"create_entry failed: {e} | Response: {api_response}")
+            else:
+                logger.error(f"create_entry failed: {e}")
+            raise RuntimeError(f"VC.RU API error: {e}" + (f" | {api_response}" if api_response else ""))
 
     def publish_article(
         self,
@@ -221,3 +224,18 @@ class VcPublisher:
             subsite_id=subsite_id,
             publish=publish,
         )
+
+    def check_token(self) -> dict:
+        """Проверяет валидность токена. Возвращает {'ok': bool, 'user': str, 'error': str}."""
+        try:
+            resp = self.session.get(f"{self.base_url}/auth/me", timeout=15)
+            resp.raise_for_status()
+            data = resp.json()
+            user = data.get("result", {})
+            name = user.get("name") or user.get("login") or str(user.get("id", "?"))
+            return {"ok": True, "user": name}
+        except Exception as e:
+            api_response = ""
+            if hasattr(e, "response") and e.response is not None:
+                api_response = e.response.text[:300]
+            return {"ok": False, "error": f"{e}" + (f" | {api_response}" if api_response else "")}

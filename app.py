@@ -426,7 +426,7 @@ async function publishCurrent() {
   });
   const data = await res.json();
   if (data.ok) showToast('✅ Опубликовано: ' + (data.url || ''), 5000);
-  else showToast('❌ ' + (data.error || 'Ошибка публикации'), 5000);
+  else showToast('❌ ' + (data.error || 'Ошибка публикации'), 8000);
 }
 
 // ─── Toast ────────────────────────────────────────────────────────────────
@@ -670,6 +670,9 @@ def api_publish():
             keywords=data.get("keywords", []),
         )
 
+        if not config.VC_TOKEN:
+            return jsonify({"ok": False, "error": "VC_TOKEN не задан в переменных окружения"})
+
         photos = pick_photos(config.PHOTOS_DIR, count=config.PHOTOS_PER_ARTICLE)
         pub = VcPublisher(token=config.VC_TOKEN, base_url=config.VC_BASE_URL)
         result = pub.publish_article(article=article, image_paths=photos,
@@ -677,9 +680,18 @@ def api_publish():
         if result:
             url = result.get("url") or f"https://vc.ru/id/{result.get('id','?')}"
             return jsonify({"ok": True, "url": url})
-        return jsonify({"ok": False, "error": "Ошибка публикации — проверьте токен VC.RU"})
+        return jsonify({"ok": False, "error": "Ошибка публикации — нет данных в ответе"})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
+
+
+@app.route("/api/check_vc")
+def api_check_vc():
+    if not config.VC_TOKEN:
+        return jsonify({"ok": False, "error": "VC_TOKEN не задан в переменных окружения Railway"})
+    pub = VcPublisher(token=config.VC_TOKEN, base_url=config.VC_BASE_URL)
+    result = pub.check_token()
+    return jsonify(result)
 
 
 @app.route("/manifest.json")

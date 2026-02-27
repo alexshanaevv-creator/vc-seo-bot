@@ -13,7 +13,7 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 #  2. Откройте DevTools → Network → любой запрос к api.vc.ru
 #  3. Скопируйте значение заголовка X-Device-Token
 VC_TOKEN = os.environ.get("VC_TOKEN", "")
-VC_BASE_URL = "https://api.vc.ru/v1.9"
+VC_BASE_URL = "https://api.vc.ru/v2.8"
 VC_SUBSITE_ID = None   # None = личный блог. Для компании — ID субсайта (число)
 
 # ─── Фото ────────────────────────────────────────────────────────────────────

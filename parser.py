@@ -41,7 +41,12 @@ class Topic:
 
 def _fetch(url: str, timeout: int = 15) -> Optional[str]:
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=timeout)
+        resp = requests.get(
+            url,
+            headers=HEADERS,
+            timeout=timeout,
+            proxies={"http": None, "https": None},
+        )
         resp.raise_for_status()
         resp.encoding = resp.apparent_encoding
         return resp.text

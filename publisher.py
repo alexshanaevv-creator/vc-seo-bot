@@ -56,7 +56,6 @@ class VcPublisher:
                 )
             resp.raise_for_status()
             data = resp.json()
-            # Ответ: {"result": {"data": {"uuid": "...", "url": "...", ...}}}
             img_data = (
                 data.get("result", {}).get("data")
                 or data.get("data")
@@ -110,14 +109,12 @@ class VcPublisher:
         uploaded_images — список результатов upload_image(), по порядку.
         """
         blocks: list[dict] = []
-        img_queue = list(uploaded_images)  # копия, будем pop
+        img_queue = list(uploaded_images)
 
-        # Вводный текст
         for para in article.intro.split("\n\n"):
             if para.strip():
                 blocks.append(self._paragraph_block(para.strip()))
 
-        # Разделы
         for section in article.sections:
             heading = section.get("heading", "")
             paragraphs = section.get("paragraphs", [])
@@ -134,19 +131,16 @@ class VcPublisher:
             if list_items:
                 blocks.append(self._list_block(list_items))
 
-            # Вставляем фото если нужно и есть в очереди
             if has_photo and img_queue:
                 img_data = img_queue.pop(0)
                 blocks.append(self._image_block(img_data))
 
-        # Заключение
         if article.conclusion:
             blocks.append(self._header_block("Заключение", level=2))
             for para in article.conclusion.split("\n\n"):
                 if para.strip():
                     blocks.append(self._paragraph_block(para.strip()))
 
-        # Если остались незадействованные фото — добавляем перед заключением
         for img_data in img_queue:
             blocks.insert(-1 if len(blocks) > 1 else len(blocks), self._image_block(img_data))
 
@@ -207,17 +201,14 @@ class VcPublisher:
         Полный цикл: загрузить фото → собрать блоки → создать запись.
         Возвращает dict записи или None при ошибке.
         """
-        # 1. Загружаем фотографии
         uploaded = []
         for path in image_paths:
             img = self.upload_image(path)
             if img:
                 uploaded.append(img)
 
-        # 2. Собираем EditorJS-блоки
         blocks = self.build_blocks(article, uploaded)
 
-        # 3. Создаём запись
         return self.create_entry(
             article=article,
             blocks=blocks,

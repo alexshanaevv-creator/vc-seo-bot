@@ -5,6 +5,7 @@
 Формат контента: EditorJS-совместимые блоки.
 """
 
+import json
 import logging
 import mimetypes
 import os
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 class VcPublisher:
     """Клиент для публикации статей на VC.RU через Osnova API."""
 
-    def __init__(self, token: str, base_url: str = "https://api.vc.ru/v1.9"):
+    def __init__(self, token: str, base_url: str = "https://api.vc.ru/v2.8"):
         self.token = token
         self.base_url = base_url.rstrip("/")
         self.session = requests.Session()
@@ -29,7 +30,6 @@ class VcPublisher:
             "X-Device-Token": token,
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             "Accept": "application/json",
-            "Content-Type": "application/json",
         })
         # Обходим системный прокси для прямого подключения к VC.RU
         self.session.proxies = {"http": None, "https": None}
@@ -56,7 +56,6 @@ class VcPublisher:
                 )
             resp.raise_for_status()
             data = resp.json()
-            # Ответ: {"result": {"data": {"uuid": "...", "url": "...", ...}}}
             img_data = (
                 data.get("result", {}).get("data")
                 or data.get("data")
@@ -110,14 +109,12 @@ class VcPublisher:
         uploaded_images — список результатов upload_image(), по порядку.
         """
         blocks: list[dict] = []
-        img_queue = list(uploaded_images)  # копия, будем pop
+        img_queue = list(uploaded_images)
 
-        # Вводный текст
         for para in article.intro.split("\n\n"):
             if para.strip():
                 blocks.append(self._paragraph_block(para.strip()))
 
-        # Разделы
         for section in article.sections:
             heading = section.get("heading", "")
             paragraphs = section.get("paragraphs", [])
@@ -134,19 +131,16 @@ class VcPublisher:
             if list_items:
                 blocks.append(self._list_block(list_items))
 
-            # Вставляем фото если нужно и есть в очереди
             if has_photo and img_queue:
                 img_data = img_queue.pop(0)
                 blocks.append(self._image_block(img_data))
 
-        # Заключение
         if article.conclusion:
             blocks.append(self._header_block("Заключение", level=2))
             for para in article.conclusion.split("\n\n"):
                 if para.strip():
                     blocks.append(self._paragraph_block(para.strip()))
 
-        # Если остались незадействованные фото — добавляем перед заключением
         for img_data in img_queue:
             blocks.insert(-1 if len(blocks) > 1 else len(blocks), self._image_block(img_data))
 
@@ -168,20 +162,16 @@ class VcPublisher:
         """
         payload = {
             "title": article.title,
-            "entry": {
-                "blocks": blocks,
-                "version": "2.14",
-            },
+            "text": json.dumps({"blocks": blocks, "version": "2.14"}),
         }
         if subsite_id:
-            payload["subsite_id"] = subsite_id
-
+            payload["subsite_id"] = str(subsite_id)
         if not publish:
-            payload["is_published"] = 0
+            payload["is_published"] = "0"
         url = f"{self.base_url}/entry/create"
 
         try:
-            resp = self.session.post(url, json=payload, timeout=30)
+            resp = self.session.post(url, data=payload, timeout=30)
             resp.raise_for_status()
             data = resp.json()
             entry = data.get("result", {}).get("entry") or data.get("entry") or data
@@ -208,20 +198,18 @@ class VcPublisher:
         Полный цикл: загрузить фото → собрать блоки → создать запись.
         Возвращает dict записи или None при ошибке.
         """
-        # 1. Загружаем фотографии
         uploaded = []
         for path in image_paths:
             img = self.upload_image(path)
             if img:
                 uploaded.append(img)
 
-        # 2. Собираем EditorJS-блоки
         blocks = self.build_blocks(article, uploaded)
 
-        # 3. Создаём запись
         return self.create_entry(
             article=article,
             blocks=blocks,
             subsite_id=subsite_id,
             publish=publish,
         )
+

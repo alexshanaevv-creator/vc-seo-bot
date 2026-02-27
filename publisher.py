@@ -176,8 +176,9 @@ class VcPublisher:
         if subsite_id:
             payload["subsite_id"] = subsite_id
 
-        endpoint = "entry/create" if publish else "entry/save-draft"
-        url = f"{self.base_url}/{endpoint}"
+        if not publish:
+            payload["is_published"] = 0
+        url = f"{self.base_url}/entry/create"
 
         try:
             resp = self.session.post(url, json=payload, timeout=30)

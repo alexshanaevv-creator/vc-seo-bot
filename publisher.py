@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 class VcPublisher:
     """Клиент для публикации статей на VC.RU через Osnova API."""
 
-    def __init__(self, token: str, base_url: str = "https://api.vc.ru/v2.8"):
+    def __init__(self, token: str, base_url: str = "https://api.vc.ru/v1.9"):
         self.token = token
         self.base_url = base_url.rstrip("/")
         self.session = requests.Session()

@@ -5,6 +5,7 @@
 Формат контента: EditorJS-совместимые блоки.
 """
 
+import json
 import logging
 import mimetypes
 import os
@@ -29,7 +30,6 @@ class VcPublisher:
             "X-Device-Token": token,
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             "Accept": "application/json",
-            "Content-Type": "application/json",
         })
         # Обходим системный прокси для прямого подключения к VC.RU
         self.session.proxies = {"http": None, "https": None}
@@ -168,19 +168,16 @@ class VcPublisher:
         """
         payload = {
             "title": article.title,
-            "entry": {
-                "blocks": blocks,
-                "version": "2.14",
-            },
+            "text": json.dumps({"blocks": blocks, "version": "2.14"}),
         }
         if subsite_id:
-            payload["subsite_id"] = subsite_id
-
-        endpoint = "entry/create" if publish else "entry/save-draft"
-        url = f"{self.base_url}/{endpoint}"
+            payload["subsite_id"] = str(subsite_id)
+        if not publish:
+            payload["is_published"] = "0"
+        url = f"{self.base_url}/entry/create"
 
         try:
-            resp = self.session.post(url, json=payload, timeout=30)
+            resp = self.session.post(url, data=payload, timeout=30)
             resp.raise_for_status()
             data = resp.json()
             entry = data.get("result", {}).get("entry") or data.get("entry") or data

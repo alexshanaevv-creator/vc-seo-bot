@@ -224,6 +224,36 @@ TEMPLATE = """<!DOCTYPE html>
           </div>
         </div>
 
+        <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-top:8px;">
+          <div style="padding:10px 14px;background:var(--gray);font-weight:600;font-size:.85rem;cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="toggleSection('photosSection')">
+            🖼️ Фотографии для статьи <span id="photosSectionToggle">▶</span>
+          </div>
+          <div id="photosSection" style="display:none;padding:12px 14px;">
+            <div style="display:flex;gap:12px;margin-bottom:10px;">
+              <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;">
+                <input type="radio" name="photo_source" value="yandex" id="photoYandex" onchange="switchPhotoSource()"> Яндекс.Диск
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;">
+                <input type="radio" name="photo_source" value="pexels" id="photoPexels" onchange="switchPhotoSource()" checked> Поиск (Pexels)
+              </label>
+            </div>
+            <div id="photoYandexInput" style="display:none;">
+              <div style="display:flex;gap:8px;">
+                <input type="text" id="yandexDiskUrl" placeholder="https://disk.yandex.ru/d/..." style="flex:1;">
+                <button class="btn btn-sm btn-ghost" onclick="loadYandexDisk()">Загрузить</button>
+              </div>
+            </div>
+            <div id="photoPexelsInput">
+              <div style="display:flex;gap:8px;">
+                <input type="text" id="pexelsQuery" placeholder="Запрос для поиска фото..." style="flex:1;">
+                <button class="btn btn-sm btn-ghost" onclick="searchPexels()">Найти</button>
+              </div>
+            </div>
+            <div id="photoResults" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px;max-height:200px;overflow-y:auto;"></div>
+            <div id="selectedPhotosInfo" style="margin-top:6px;font-size:.8rem;color:var(--muted);"></div>
+          </div>
+        </div>
+
         <label style="margin-top:8px;">Режим публикации</label>
         <select id="publish_mode">
           <option value="draft">Сохранить как черновик на VC.RU</option>
@@ -407,6 +437,74 @@ function renderSelectedVideos() {
     `).join('');
 }
 
+// ─── Photos ────────────────────────────────────────────────────────────────
+let selectedPhotoUrls = [];
+
+function switchPhotoSource() {
+  const val = document.querySelector('input[name="photo_source"]:checked').value;
+  document.getElementById('photoYandexInput').style.display = val === 'yandex' ? 'block' : 'none';
+  document.getElementById('photoPexelsInput').style.display = val === 'pexels' ? 'block' : 'none';
+  document.getElementById('photoResults').innerHTML = '';
+  selectedPhotoUrls = [];
+  document.getElementById('selectedPhotosInfo').textContent = '';
+}
+
+async function loadYandexDisk() {
+  const url = document.getElementById('yandexDiskUrl').value.trim();
+  if (!url) return;
+  const btn = event.target; btn.textContent = '...'; btn.disabled = true;
+  try {
+    const res = await fetch('/api/yandex-disk', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({url})
+    });
+    const data = await res.json();
+    renderPhotoResults(data.images || [], 'yandex_disk_url', url);
+  } catch(e) { showToast('Ошибка загрузки Яндекс.Диска'); }
+  btn.textContent = 'Загрузить'; btn.disabled = false;
+}
+
+async function searchPexels() {
+  const q = document.getElementById('pexelsQuery').value.trim();
+  if (!q) return;
+  const btn = event.target; btn.textContent = '...'; btn.disabled = true;
+  try {
+    const res = await fetch('/api/search-images', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({query: q})
+    });
+    const data = await res.json();
+    renderPhotoResults(data.images || [], 'pexels', q);
+  } catch(e) { showToast('Ошибка поиска фото'); }
+  btn.textContent = 'Найти'; btn.disabled = false;
+}
+
+function renderPhotoResults(images, source, sourceVal) {
+  const el = document.getElementById('photoResults');
+  if (!images.length) { el.innerHTML = '<div style="color:var(--muted);font-size:.82rem;">Ничего не найдено</div>'; return; }
+  el.innerHTML = images.map((img, i) => {
+    const thumb = img.thumbnail || img.url || img;
+    const full = img.url || img;
+    return `<div style="position:relative;cursor:pointer;" onclick="togglePhoto('${full}', '${thumb}', this)">
+      <img src="${thumb}" style="width:80px;height:60px;object-fit:cover;border-radius:6px;border:2px solid transparent;" id="pimg_${i}">
+      <div style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,.5);color:#fff;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:.7rem;" id="pbadge_${i}"></div>
+    </div>`;
+  }).join('');
+}
+
+function togglePhoto(url, thumb, el) {
+  const img = el.querySelector('img');
+  if (selectedPhotoUrls.includes(url)) {
+    selectedPhotoUrls = selectedPhotoUrls.filter(u => u !== url);
+    img.style.border = '2px solid transparent';
+  } else if (selectedPhotoUrls.length < 5) {
+    selectedPhotoUrls.push(url);
+    img.style.border = '2px solid var(--blue)';
+  } else { showToast('Максимум 5 фото'); return; }
+  document.getElementById('selectedPhotosInfo').textContent =
+    selectedPhotoUrls.length ? `Выбрано: ${selectedPhotoUrls.length} фото` : '';
+}
+
 // ─── Load articles ─────────────────────────────────────────────────────────
 
 async function loadArticles() {
@@ -449,8 +547,35 @@ function showPreview(data) {
     `${data.date}  ·  ~${data.words} слов  ·  ${data.filename}`;
 
   let html = '';
+
+  // SEO-мета
+  if (data.meta_description || data.keywords) {
+    html += `<div style="background:#f0f9ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:.83rem;">
+      <div style="font-weight:700;margin-bottom:6px;color:#1e40af;">🔍 SEO</div>
+      ${data.meta_description ? `<div><b>Meta:</b> ${data.meta_description}</div>` : ''}
+      ${data.keywords ? `<div style="margin-top:4px;"><b>Ключи:</b> ${Array.isArray(data.keywords) ? data.keywords.join(', ') : data.keywords}</div>` : ''}
+      ${data.breadcrumbs ? `<div style="margin-top:4px;"><b>Хлебные крошки:</b> ${Array.isArray(data.breadcrumbs) ? data.breadcrumbs.join(' → ') : data.breadcrumbs}</div>` : ''}
+    </div>`;
+  }
+
+  // AI GEO — краткое описание
+  if (data.brief) {
+    html += `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:.85rem;">
+      <div style="font-weight:700;margin-bottom:6px;color:#15803d;">🤖 AI GEO — Кратко о товаре</div>
+      <p style="margin:0;">${data.brief}</p>
+    </div>`;
+  }
+
+  // Вступление
   if (data.intro) html += data.intro.split('\\n\\n').map(p => `<p>${p}</p>`).join('');
 
+  // О модели
+  if (data.about_text) {
+    html += `<h2>О модели</h2>`;
+    html += data.about_text.split('\\n\\n').map(p => `<p>${p}</p>`).join('');
+  }
+
+  // Основные разделы
   (data.sections || []).forEach(s => {
     html += `<h2>${s.heading || ''}</h2>`;
     (s.paragraphs || []).forEach(p => html += `<p>${p}</p>`);
@@ -462,6 +587,75 @@ function showPreview(data) {
     }
   });
 
+  // Таблица характеристик
+  if (data.specs_table && data.specs_table.length) {
+    html += `<h2>📊 Технические характеристики</h2>
+    <table style="width:100%;border-collapse:collapse;font-size:.88rem;margin-bottom:16px;">
+      <thead><tr style="background:#f1f5f9;">
+        <th style="text-align:left;padding:8px 12px;border:1px solid var(--border);">Параметр</th>
+        <th style="text-align:left;padding:8px 12px;border:1px solid var(--border);">Значение</th>
+      </tr></thead><tbody>`;
+    data.specs_table.forEach(row => {
+      html += `<tr><td style="padding:8px 12px;border:1px solid var(--border);font-weight:600;">${row.param||row[0]||''}</td>
+               <td style="padding:8px 12px;border:1px solid var(--border);">${row.value||row[1]||''}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+  }
+
+  // FAQ
+  if (data.faq && data.faq.length) {
+    html += `<h2>❓ FAQ</h2>`;
+    data.faq.forEach(item => {
+      html += `<div style="margin-bottom:12px;">
+        <div style="font-weight:700;margin-bottom:4px;">${item.question||item.q||''}</div>
+        <div style="color:#374151;">${item.answer||item.a||''}</div>
+      </div>`;
+    });
+  }
+
+  // Сравнение
+  if (data.comparison && data.comparison.length) {
+    html += `<h2>⚖️ Сравнение</h2>
+    <table style="width:100%;border-collapse:collapse;font-size:.88rem;margin-bottom:16px;"><tbody>`;
+    data.comparison.forEach(row => {
+      html += `<tr><td style="padding:8px 12px;border:1px solid var(--border);font-weight:600;width:40%;">${row.aspect||row[0]||''}</td>
+               <td style="padding:8px 12px;border:1px solid var(--border);">${row.value||row[1]||''}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+  }
+
+  // Для кого
+  if (data.for_whom && data.for_whom.length) {
+    html += `<h2>👤 Для кого</h2><ul>`;
+    data.for_whom.forEach(item => html += `<li>${item}</li>`);
+    html += `</ul>`;
+  }
+
+  // Экспертный блок
+  if (data.expert_comment) {
+    html += `<div style="background:#faf5ff;border-left:4px solid #a855f7;padding:12px 16px;margin:16px 0;border-radius:0 8px 8px 0;">
+      <div style="font-weight:700;color:#7c3aed;margin-bottom:6px;">👨‍⚕️ Экспертный комментарий</div>
+      <p style="margin:0;font-style:italic;">${data.expert_comment}</p>
+    </div>`;
+  }
+
+  // Отзывы
+  if (data.reviews && data.reviews.length) {
+    html += `<h2>⭐ Отзывы</h2>`;
+    data.reviews.forEach(r => {
+      const stars = '★'.repeat(r.rating||5) + '☆'.repeat(5-(r.rating||5));
+      html += `<div style="border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+          <span style="font-weight:600;">${r.author||r.name||'Покупатель'}</span>
+          <span style="color:#f59e0b;">${stars}</span>
+        </div>
+        <div style="font-size:.83rem;color:var(--muted);margin-bottom:6px;">${r.date||''}</div>
+        <p style="margin:0;font-size:.9rem;">${r.text||r.comment||''}</p>
+      </div>`;
+    });
+  }
+
+  // Заключение
   if (data.conclusion) {
     html += `<h2>Заключение</h2>`;
     html += data.conclusion.split('\\n\\n').map(p => `<p>${p}</p>`).join('');
@@ -754,11 +948,21 @@ def api_generate():
 
             meta_json = _json.dumps({
                 "title": article.title,
-                "intro": article.intro,
-                "sections": article.sections,
-                "conclusion": article.conclusion,
                 "meta_description": article.meta_description,
                 "keywords": article.keywords,
+                "breadcrumbs": article.breadcrumbs,
+                "brief": article.brief,
+                "intro": article.intro,
+                "about_text": article.about_text,
+                "sections": article.sections,
+                "specs_table": article.specs_table,
+                "faq": article.faq,
+                "comparison": article.comparison,
+                "for_whom": article.for_whom,
+                "expert_comment": article.expert_comment,
+                "reviews": article.reviews,
+                "conclusion": article.conclusion,
+                "image_alts": article.image_alts,
             }, ensure_ascii=False)
 
             html = f"""<!DOCTYPE html>
@@ -873,6 +1077,17 @@ def api_search_web():
         return jsonify({"results": results})
     except Exception as e:
         return jsonify({"results": [], "error": str(e)})
+
+
+@app.route("/api/search-images", methods=["POST"])
+def api_search_images():
+    from photos import search_pexels_images
+    body = request.get_json() or {}
+    query = body.get("query", "").strip()
+    if not query:
+        return jsonify({"images": []})
+    images = search_pexels_images(query, api_key=config.PEXELS_API_KEY, count=10)
+    return jsonify({"images": images})
 
 
 @app.route("/api/search-rutube", methods=["POST"])

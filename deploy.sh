@@ -43,10 +43,10 @@ GEMINI_API_KEY=${GEMINI_KEY:-}
 PEXELS_API_KEY=${PEXELS_KEY:-}
 ENVEOF
 
-# Python-зависимости
+# Python-зависимости (--break-system-packages для Ubuntu 24.04)
 echo "[5/7] Установка Python-библиотек..."
-pip3 install -r requirements.txt -q
-pip3 install python-dotenv google-generativeai -q
+pip3 install --break-system-packages -r requirements.txt -q
+pip3 install --break-system-packages python-dotenv google-generativeai -q
 
 # Systemd-сервис
 echo "[6/7] Создание автозапуска (systemd)..."

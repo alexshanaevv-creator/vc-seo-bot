@@ -98,7 +98,7 @@ def generate_article(
     links_count: int = 2,
     tone: str = "экспертный, информативный",
     image_count: int = 3,
-    model: str = "claude-opus-4-6",
+    model: str = "claude-haiku-4-5-20251001",
 ) -> GeneratedArticle:
     """Генерирует статью через Claude API и возвращает структурированный объект."""
 

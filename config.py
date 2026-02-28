@@ -43,3 +43,15 @@ ARTICLE_LANGUAGE = "Russian"
 ARTICLE_TONE = "экспертный, информативный, с практическими советами"
 ARTICLE_LINKS_COUNT = 2                  # Сколько ссылок на сайт вставить
 PUBLISH_AS_DRAFT = True                  # True = сохранять как черновик, False = сразу публиковать
+
+# ─── Gemini API ───────────────────────────────────────────────────────────────
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL = "gemini-2.0-flash"
+
+# ─── LLM Provider ────────────────────────────────────────────────────────────
+# "auto" = expert→Claude, general→Gemini | "claude" | "gemini"
+LLM_PROVIDER = "auto"
+CLAUDE_MODEL = "claude-opus-4-6"
+
+# ─── Pexels API ──────────────────────────────────────────────────────────────
+PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "")

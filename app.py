@@ -186,7 +186,45 @@ TEMPLATE = """<!DOCTYPE html>
         <label>Доп. контекст (необязательно)</label>
         <textarea id="description" placeholder="Что важно упомянуть, акценты..."></textarea>
 
-        <label>Режим публикации</label>
+        <label>Тип статьи</label>
+        <select id="article_type">
+          <option value="general">Общетематическая (Gemini Flash — бесплатно)</option>
+          <option value="expert">Экспертная (Claude Opus — только позитив)</option>
+        </select>
+
+        <label>Характеристики товара/услуги (необязательно)</label>
+        <textarea id="product_specs" placeholder="Модель, цена, технические параметры, особенности...&#10;Используется для точных цифр в статье." style="height:80px;"></textarea>
+
+        <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-top:2px;">
+          <div style="padding:10px 14px;background:var(--gray);font-weight:600;font-size:.85rem;cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="toggleSection('webSearchSection')">
+            🔍 Веб-поиск для исследования <span id="webSearchToggle">▶</span>
+          </div>
+          <div id="webSearchSection" style="display:none;padding:12px 14px;">
+            <div style="display:flex;gap:8px;margin-bottom:8px;">
+              <input type="text" id="webSearchQuery" placeholder="Запрос для поиска..." style="flex:1;">
+              <button class="btn btn-sm btn-ghost" onclick="searchWeb()">Найти</button>
+            </div>
+            <div id="webSearchResults" style="font-size:.82rem;max-height:200px;overflow-y:auto;"></div>
+            <label style="margin-top:10px;display:block;">Одобренные данные для статьи</label>
+            <textarea id="research_data" placeholder="Скопируйте сюда нужные факты из результатов поиска..." style="height:80px;font-size:.82rem;"></textarea>
+          </div>
+        </div>
+
+        <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-top:8px;">
+          <div style="padding:10px 14px;background:var(--gray);font-weight:600;font-size:.85rem;cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="toggleSection('rutubeSection')">
+            📹 Видео RuTube <span id="rutubeSectionToggle">▶</span>
+          </div>
+          <div id="rutubeSection" style="display:none;padding:12px 14px;">
+            <div style="display:flex;gap:8px;margin-bottom:8px;">
+              <input type="text" id="rutubeQuery" placeholder="Запрос для поиска видео..." style="flex:1;">
+              <button class="btn btn-sm btn-ghost" onclick="searchRutube()">Найти</button>
+            </div>
+            <div id="rutubeResults" style="font-size:.82rem;max-height:200px;overflow-y:auto;"></div>
+            <div id="selectedVideos" style="margin-top:8px;font-size:.82rem;"></div>
+          </div>
+        </div>
+
+        <label style="margin-top:8px;">Режим публикации</label>
         <select id="publish_mode">
           <option value="draft">Сохранить как черновик на VC.RU</option>
           <option value="local">Только сохранить локально (без VC.RU)</option>
@@ -254,6 +292,120 @@ let articles = [];
 let currentArticle = null;
 let currentTask = null;
 let pollInterval = null;
+let selectedVideoEmbeds = [];
+
+function toggleSection(id) {
+  const el = document.getElementById(id);
+  const toggle = document.getElementById(id + 'Toggle');
+  if (el.style.display === 'none') {
+    el.style.display = 'block';
+    if (toggle) toggle.textContent = '▼';
+  } else {
+    el.style.display = 'none';
+    if (toggle) toggle.textContent = '▶';
+  }
+}
+
+async function searchWeb() {
+  const q = document.getElementById('webSearchQuery').value.trim();
+  if (!q) return;
+  const btn = event.target;
+  btn.textContent = '...';
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/search-web', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({query: q})
+    });
+    const data = await res.json();
+    const el = document.getElementById('webSearchResults');
+    if (!data.results || !data.results.length) {
+      el.innerHTML = '<div style="color:var(--muted);padding:8px 0;">Ничего не найдено</div>';
+    } else {
+      el.innerHTML = data.results.map(r => `
+        <div style="padding:6px 0;border-bottom:1px solid var(--border);">
+          <div style="font-weight:600;margin-bottom:2px;">${r.title}</div>
+          <div style="color:var(--muted);margin-bottom:4px;">${r.snippet || ''}</div>
+          <button class="btn btn-sm btn-ghost" style="font-size:.75rem;padding:2px 8px;"
+            onclick="addToResearch('${(r.title + ': ' + (r.snippet||'')).replace(/'/g,"\\'")}')">
+            + В исследование
+          </button>
+        </div>
+      `).join('');
+    }
+  } catch(e) {
+    document.getElementById('webSearchResults').innerHTML = '<div style="color:var(--red);">Ошибка поиска</div>';
+  }
+  btn.textContent = 'Найти';
+  btn.disabled = false;
+}
+
+function addToResearch(text) {
+  const ta = document.getElementById('research_data');
+  ta.value = (ta.value ? ta.value + '\n\n' : '') + text;
+  showToast('Добавлено в исследование');
+}
+
+async function searchRutube() {
+  const q = document.getElementById('rutubeQuery').value.trim();
+  if (!q) return;
+  const btn = event.target;
+  btn.textContent = '...';
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/search-rutube', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({query: q})
+    });
+    const data = await res.json();
+    const el = document.getElementById('rutubeResults');
+    if (!data.videos || !data.videos.length) {
+      el.innerHTML = '<div style="color:var(--muted);padding:8px 0;">Ничего не найдено</div>';
+    } else {
+      el.innerHTML = data.videos.map(v => `
+        <div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;">
+          ${v.thumbnail ? `<img src="${v.thumbnail}" style="width:80px;height:45px;object-fit:cover;border-radius:4px;">` : ''}
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${v.title}</div>
+            <button class="btn btn-sm btn-ghost" style="font-size:.75rem;padding:2px 8px;margin-top:4px;"
+              onclick='addVideo(${JSON.stringify(v)})'>+ Добавить в статью</button>
+          </div>
+        </div>
+      `).join('');
+    }
+  } catch(e) {
+    document.getElementById('rutubeResults').innerHTML = '<div style="color:var(--red);">Ошибка поиска</div>';
+  }
+  btn.textContent = 'Найти';
+  btn.disabled = false;
+}
+
+function addVideo(v) {
+  if (selectedVideoEmbeds.find(x => x.id === v.id)) { showToast('Видео уже добавлено'); return; }
+  selectedVideoEmbeds.push(v);
+  renderSelectedVideos();
+  showToast('Видео добавлено в статью');
+}
+
+function removeVideo(id) {
+  selectedVideoEmbeds = selectedVideoEmbeds.filter(v => v.id !== id);
+  renderSelectedVideos();
+}
+
+function renderSelectedVideos() {
+  const el = document.getElementById('selectedVideos');
+  if (!selectedVideoEmbeds.length) { el.innerHTML = ''; return; }
+  el.innerHTML = '<div style="font-weight:600;margin-bottom:6px;">Выбрано для статьи:</div>' +
+    selectedVideoEmbeds.map(v => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;">
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${v.title}</span>
+        <button class="btn btn-sm btn-ghost" style="font-size:.75rem;padding:2px 8px;margin-left:8px;color:var(--red);"
+          onclick="removeVideo('${v.id}')">✕</button>
+      </div>
+    `).join('');
+}
 
 // ─── Load articles ─────────────────────────────────────────────────────────
 
@@ -337,6 +489,10 @@ async function generateArticle() {
     body: JSON.stringify({
       topic,
       description: document.getElementById('description').value,
+      article_type: document.getElementById('article_type').value,
+      product_specs: document.getElementById('product_specs').value,
+      research_data: document.getElementById('research_data').value,
+      video_embeds: selectedVideoEmbeds.map(v => v.embed_html),
       publish,
       local_only: localOnly,
     })
@@ -560,13 +716,22 @@ def api_generate():
             article = generate_article(
                 topic_title=topic,
                 topic_description=body.get("description", ""),
+                product_specs=body.get("product_specs", ""),
+                research_data=body.get("research_data", ""),
+                article_type=body.get("article_type", "general"),
                 niche_keywords=config.NICHE_KEYWORDS,
                 site_url=config.YOUR_SITE_URL,
                 site_anchor=config.YOUR_SITE_ANCHOR,
-                api_key=config.ANTHROPIC_API_KEY,
+                claude_api_key=config.ANTHROPIC_API_KEY,
+                gemini_api_key=config.GEMINI_API_KEY,
                 min_words=config.ARTICLE_MIN_WORDS,
                 links_count=config.ARTICLE_LINKS_COUNT,
                 tone=config.ARTICLE_TONE,
+                llm_provider=config.LLM_PROVIDER,
+                claude_model=config.CLAUDE_MODEL,
+                gemini_model=config.GEMINI_MODEL,
+                video_embeds=body.get("video_embeds", []),
+                image_count=config.PHOTOS_PER_ARTICLE,
             )
 
             # Сохраняем HTML + JSON-мету внутри
@@ -680,6 +845,57 @@ def api_publish():
         return jsonify({"ok": False, "error": "Ошибка публикации — проверьте токен VC.RU"})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
+
+
+@app.route("/api/search-web", methods=["POST"])
+def api_search_web():
+    import urllib.parse
+    query = (request.get_json() or {}).get("query", "").strip()
+    if not query:
+        return jsonify({"results": []})
+    try:
+        import requests as _req
+        resp = _req.get(
+            "https://api.duckduckgo.com/",
+            params={"q": query, "format": "json", "no_html": "1", "skip_disambig": "1"},
+            timeout=10,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        data = resp.json()
+        results = []
+        if data.get("AbstractText"):
+            results.append({"title": data.get("Heading", query), "snippet": data["AbstractText"]})
+        for r in data.get("RelatedTopics", []):
+            if isinstance(r, dict) and r.get("Text"):
+                results.append({"title": r["Text"][:80], "snippet": r["Text"]})
+            if len(results) >= 8:
+                break
+        return jsonify({"results": results})
+    except Exception as e:
+        return jsonify({"results": [], "error": str(e)})
+
+
+@app.route("/api/search-rutube", methods=["POST"])
+def api_search_rutube():
+    from photos import search_rutube_videos
+    query = (request.get_json() or {}).get("query", "").strip()
+    if not query:
+        return jsonify({"videos": []})
+    videos = search_rutube_videos(query, count=6)
+    return jsonify({"videos": videos})
+
+
+@app.route("/api/yandex-disk", methods=["POST"])
+def api_yandex_disk():
+    from photos import list_yandex_disk_images
+    url = (request.get_json() or {}).get("url", "").strip()
+    if not url:
+        return jsonify({"images": []})
+    try:
+        images = list_yandex_disk_images(url)
+        return jsonify({"images": images})
+    except Exception as e:
+        return jsonify({"images": [], "error": str(e)})
 
 
 @app.route("/manifest.json")

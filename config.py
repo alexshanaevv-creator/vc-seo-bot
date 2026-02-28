@@ -3,6 +3,8 @@
 Заполните все значения перед запуском.
 """
 import os
+from dotenv import load_dotenv
+load_dotenv()
 
 # ─── Claude / Anthropic API ───────────────────────────────────────────────────
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")

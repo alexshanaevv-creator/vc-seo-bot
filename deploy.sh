@@ -6,7 +6,7 @@ echo "=== Установка VC SEO Bot ==="
 # Системные зависимости
 echo "[1/7] Установка зависимостей системы..."
 apt-get update -qq
-apt-get install -y -qq python3 python3-pip git curl
+apt-get install -y -qq python3 python3-pip python3.12-venv git curl
 
 # Директория
 echo "[2/7] Подготовка директории..."
@@ -43,14 +43,15 @@ GEMINI_API_KEY=${GEMINI_KEY:-}
 PEXELS_API_KEY=${PEXELS_KEY:-}
 ENVEOF
 
-# Python-зависимости (--break-system-packages для Ubuntu 24.04)
-echo "[5/7] Установка Python-библиотек..."
-pip3 install --break-system-packages -r requirements.txt -q
-pip3 install --break-system-packages python-dotenv google-generativeai -q
+# Виртуальное окружение и зависимости
+echo "[5/7] Создание venv и установка Python-библиотек..."
+python3 -m venv venv
+venv/bin/pip install --upgrade pip -q
+venv/bin/pip install flask anthropic requests beautifulsoup4 lxml python-dotenv google-generativeai -q
 
 # Systemd-сервис
 echo "[6/7] Создание автозапуска (systemd)..."
-cat > /etc/systemd/system/vc-seo-bot.service << 'SVCEOF'
+cat > /etc/systemd/system/vc-seo-bot.service << SVCEOF
 [Unit]
 Description=VC SEO Bot Flask App
 After=network.target
@@ -60,7 +61,7 @@ Type=simple
 User=root
 WorkingDirectory=/home/user/vc_seo_bot
 EnvironmentFile=/home/user/vc_seo_bot/.env
-ExecStart=/usr/bin/python3 app.py
+ExecStart=/home/user/vc_seo_bot/venv/bin/python /home/user/vc_seo_bot/app.py
 Restart=always
 RestartSec=10
 StandardOutput=append:/var/log/vc-seo-bot.log

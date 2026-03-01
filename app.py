@@ -220,6 +220,13 @@ TEMPLATE = """<!DOCTYPE html>
               <button class="btn btn-sm btn-ghost" onclick="searchRutube()">Найти</button>
             </div>
             <div id="rutubeResults" style="font-size:.82rem;max-height:200px;overflow-y:auto;"></div>
+            <div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
+              <div style="font-size:.8rem;color:var(--muted);margin-bottom:4px;">Или вставьте ссылку на видео RuTube:</div>
+              <div style="display:flex;gap:8px;">
+                <input type="text" id="rutubeUrlInput" placeholder="https://rutube.ru/video/..." style="flex:1;font-size:.82rem;">
+                <button class="btn btn-sm btn-ghost" onclick="addRutubeByUrl()">Добавить</button>
+              </div>
+            </div>
             <div id="selectedVideos" style="margin-top:8px;font-size:.82rem;"></div>
           </div>
         </div>
@@ -236,6 +243,9 @@ TEMPLATE = """<!DOCTYPE html>
               <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;">
                 <input type="radio" name="photo_source" value="pexels" id="photoPexels" onchange="switchPhotoSource()" checked> Поиск (Pexels)
               </label>
+              <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;">
+                <input type="radio" name="photo_source" value="manual" id="photoManual" onchange="switchPhotoSource()"> Прямые ссылки
+              </label>
             </div>
             <div id="photoYandexInput" style="display:none;">
               <div style="display:flex;gap:8px;">
@@ -249,6 +259,10 @@ TEMPLATE = """<!DOCTYPE html>
                 <button class="btn btn-sm btn-ghost" onclick="searchPexels()">Найти</button>
               </div>
             </div>
+            <div id="photoManualInput" style="display:none;">
+              <textarea id="manualPhotoUrls" placeholder="Вставьте ссылки на фото (по одной на строку)..." style="height:80px;font-size:.82rem;"></textarea>
+              <button class="btn btn-sm btn-ghost" style="margin-top:4px;" onclick="addManualPhotoUrls()">Добавить ссылки</button>
+            </div>
             <div id="photoResults" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px;max-height:200px;overflow-y:auto;"></div>
             <div id="selectedPhotosInfo" style="margin-top:6px;font-size:.8rem;color:var(--muted);"></div>
           </div>
@@ -260,6 +274,29 @@ TEMPLATE = """<!DOCTYPE html>
           <option value="local">Только сохранить локально (без VC.RU)</option>
           <option value="publish">Опубликовать сразу на VC.RU</option>
         </select>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;">
+          <div>
+            <label style="margin-top:0;">Длина статьи</label>
+            <select id="article_length">
+              <option value="800">Короткая (~800 слов)</option>
+              <option value="1500">Средняя (~1500 слов)</option>
+              <option value="2000" selected>Стандарт (~2000 слов)</option>
+              <option value="3000">Длинная (~3000 слов)</option>
+              <option value="5000">Очень длинная (~5000 слов)</option>
+            </select>
+          </div>
+          <div>
+            <label style="margin-top:0;">Количество фото</label>
+            <select id="photos_count">
+              <option value="1">1 фото</option>
+              <option value="2">2 фото</option>
+              <option value="3" selected>3 фото</option>
+              <option value="4">4 фото</option>
+              <option value="5">5 фото</option>
+            </select>
+          </div>
+        </div>
 
         <button class="btn btn-primary" id="genBtn" onclick="generateArticle()">
           ⚡ Сгенерировать статью
@@ -437,6 +474,32 @@ function renderSelectedVideos() {
     `).join('');
 }
 
+function addRutubeByUrl() {
+  const url = document.getElementById('rutubeUrlInput').value.trim();
+  if (!url) return;
+  const m = url.match(/rutube\.ru\/(?:video|play\/embed)\/([a-zA-Z0-9]+)/);
+  if (!m) { showToast('Не удалось распознать ссылку RuTube'); return; }
+  const videoId = m[1];
+  const embed = `<iframe width="720" height="405" src="https://rutube.ru/play/embed/${videoId}/" frameBorder="0" allow="clipboard-write; autoplay" webkitAllowFullScreen mozallowfullscreen allowFullScreen></iframe>`;
+  if (selectedVideoEmbeds.find(x => x.id === videoId)) { showToast('Видео уже добавлено'); return; }
+  selectedVideoEmbeds.push({ id: videoId, title: 'Видео: ' + url, embed_html: embed });
+  renderSelectedVideos();
+  document.getElementById('rutubeUrlInput').value = '';
+  showToast('Видео добавлено');
+}
+
+function addManualPhotoUrls() {
+  const urls = document.getElementById('manualPhotoUrls').value
+    .split('\n').map(u => u.trim()).filter(u => u.length > 0);
+  if (!urls.length) return;
+  urls.forEach(url => {
+    if (!selectedPhotoUrls.includes(url)) selectedPhotoUrls.push(url);
+  });
+  document.getElementById('selectedPhotosInfo').textContent =
+    selectedPhotoUrls.length ? `Выбрано: ${selectedPhotoUrls.length} фото` : '';
+  showToast(`Добавлено ${urls.length} фото`);
+}
+
 // ─── Photos ────────────────────────────────────────────────────────────────
 let selectedPhotoUrls = [];
 
@@ -444,6 +507,7 @@ function switchPhotoSource() {
   const val = document.querySelector('input[name="photo_source"]:checked').value;
   document.getElementById('photoYandexInput').style.display = val === 'yandex' ? 'block' : 'none';
   document.getElementById('photoPexelsInput').style.display = val === 'pexels' ? 'block' : 'none';
+  document.getElementById('photoManualInput').style.display = val === 'manual' ? 'block' : 'none';
   document.getElementById('photoResults').innerHTML = '';
   selectedPhotoUrls = [];
   document.getElementById('selectedPhotosInfo').textContent = '';
@@ -673,6 +737,8 @@ async function generateArticle() {
   const mode = document.getElementById('publish_mode').value;
   const publish = mode === 'publish';
   const localOnly = mode === 'local';
+  const minWords = parseInt(document.getElementById('article_length').value);
+  const photosCount = parseInt(document.getElementById('photos_count').value);
 
   document.getElementById('genBtn').disabled = true;
   showProgress('Отправляем запрос к Claude AI...');
@@ -687,8 +753,11 @@ async function generateArticle() {
       product_specs: document.getElementById('product_specs').value,
       research_data: document.getElementById('research_data').value,
       video_embeds: selectedVideoEmbeds.map(v => v.embed_html),
+      photo_urls: selectedPhotoUrls,
       publish,
       local_only: localOnly,
+      min_words: minWords,
+      photos_count: photosCount,
     })
   });
   const data = await res.json();
@@ -905,6 +974,9 @@ def api_generate():
     task_id = datetime.now().strftime("%Y%m%d%H%M%S%f")
     tasks[task_id] = {"status": "running"}
 
+    min_words = int(body.get("min_words") or config.ARTICLE_MIN_WORDS)
+    photos_count = int(body.get("photos_count") or config.PHOTOS_PER_ARTICLE)
+
     def worker():
         try:
             article = generate_article(
@@ -918,14 +990,14 @@ def api_generate():
                 site_anchor=config.YOUR_SITE_ANCHOR,
                 claude_api_key=config.ANTHROPIC_API_KEY,
                 gemini_api_key=config.GEMINI_API_KEY,
-                min_words=config.ARTICLE_MIN_WORDS,
+                min_words=min_words,
                 links_count=config.ARTICLE_LINKS_COUNT,
                 tone=config.ARTICLE_TONE,
                 llm_provider=config.LLM_PROVIDER,
                 claude_model=config.CLAUDE_MODEL,
                 gemini_model=config.GEMINI_MODEL,
                 video_embeds=body.get("video_embeds", []),
-                image_count=config.PHOTOS_PER_ARTICLE,
+                image_count=photos_count,
             )
 
             # Сохраняем HTML + JSON-мету внутри
@@ -988,7 +1060,31 @@ p{{margin:.8em 0}}ul{{margin:.5em 0 1em 1.5em}}.meta{{color:#888;font-size:.9em;
             entry_url = None
 
             if not local_only:
-                photos = pick_photos(config.PHOTOS_DIR, count=config.PHOTOS_PER_ARTICLE)
+                photo_urls = body.get("photo_urls", [])
+                if photo_urls:
+                    from photos import DOWNLOAD_DIR
+                    import requests as _req
+                    import shutil as _shutil
+                    DOWNLOAD_DIR.mkdir(exist_ok=True)
+                    photos = []
+                    for i, url in enumerate(photo_urls[:photos_count]):
+                        ext = url.split("?")[0].rsplit(".", 1)[-1].lower()
+                        if ext not in ("jpg", "jpeg", "png", "webp", "gif"):
+                            ext = "jpg"
+                        local = DOWNLOAD_DIR / f"manual_{i}.{ext}"
+                        try:
+                            r = _req.get(url, timeout=30, stream=True,
+                                         headers={"User-Agent": "Mozilla/5.0"})
+                            r.raise_for_status()
+                            with open(local, "wb") as f:
+                                _shutil.copyfileobj(r.raw, f)
+                            photos.append(local)
+                        except Exception as dl_err:
+                            logger.warning(f"Photo download failed {url}: {dl_err}")
+                    if not photos:
+                        photos = pick_photos(config.PHOTOS_DIR, count=photos_count)
+                else:
+                    photos = pick_photos(config.PHOTOS_DIR, count=photos_count)
                 pub = VcPublisher(token=config.VC_TOKEN, base_url=config.VC_BASE_URL)
                 result = pub.publish_article(
                     article=article,

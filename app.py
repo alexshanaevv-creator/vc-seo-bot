@@ -197,9 +197,9 @@ TEMPLATE = """<!DOCTYPE html>
 
         <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-top:2px;">
           <div style="padding:10px 14px;background:var(--gray);font-weight:600;font-size:.85rem;cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="toggleSection('webSearchSection')">
-            🔍 Веб-поиск для исследования <span id="webSearchToggle">▶</span>
+            🔍 Веб-поиск для исследования <span id="webSearchSectionToggle">▼</span>
           </div>
-          <div id="webSearchSection" style="display:none;padding:12px 14px;">
+          <div id="webSearchSection" style="display:block;padding:12px 14px;">
             <div style="display:flex;gap:8px;margin-bottom:8px;">
               <input type="text" id="webSearchQuery" placeholder="Запрос для поиска..." style="flex:1;">
               <button class="btn btn-sm btn-ghost" onclick="searchWeb()">Найти</button>
@@ -212,9 +212,9 @@ TEMPLATE = """<!DOCTYPE html>
 
         <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-top:8px;">
           <div style="padding:10px 14px;background:var(--gray);font-weight:600;font-size:.85rem;cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="toggleSection('rutubeSection')">
-            📹 Видео RuTube <span id="rutubeSectionToggle">▶</span>
+            📹 Видео RuTube <span id="rutubeSectionToggle">▼</span>
           </div>
-          <div id="rutubeSection" style="display:none;padding:12px 14px;">
+          <div id="rutubeSection" style="display:block;padding:12px 14px;">
             <div style="display:flex;gap:8px;margin-bottom:8px;">
               <input type="text" id="rutubeQuery" placeholder="Запрос для поиска видео..." style="flex:1;">
               <button class="btn btn-sm btn-ghost" onclick="searchRutube()">Найти</button>
@@ -233,9 +233,9 @@ TEMPLATE = """<!DOCTYPE html>
 
         <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-top:8px;">
           <div style="padding:10px 14px;background:var(--gray);font-weight:600;font-size:.85rem;cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="toggleSection('photosSection')">
-            🖼️ Фотографии для статьи <span id="photosSectionToggle">▶</span>
+            🖼️ Фотографии для статьи <span id="photosSectionToggle">▼</span>
           </div>
-          <div id="photosSection" style="display:none;padding:12px 14px;">
+          <div id="photosSection" style="display:block;padding:12px 14px;">
             <div style="display:flex;gap:12px;margin-bottom:10px;">
               <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;">
                 <input type="radio" name="photo_source" value="yandex" id="photoYandex" onchange="switchPhotoSource()"> Яндекс.Диск

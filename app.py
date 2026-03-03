@@ -8,6 +8,7 @@ import os
 import re
 import sys
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -26,6 +27,16 @@ ARTICLES_DIR.mkdir(exist_ok=True)
 
 # Состояние фоновых задач
 tasks: dict[str, dict] = {}
+_TASK_TTL = 3600  # секунд до удаления завершённых задач
+
+
+def _cleanup_tasks() -> None:
+    """Удаляет завершённые задачи старше TTL."""
+    now = time.time()
+    for tid in list(tasks.keys()):
+        t = tasks[tid]
+        if t.get("status") in ("done", "error") and now - t.get("ts", now) > _TASK_TTL:
+            tasks.pop(tid, None)
 
 
 # ─── HTML-шаблон ─────────────────────────────────────────────────────────────
@@ -971,8 +982,9 @@ def api_generate():
     if not topic:
         return jsonify({"error": "Нет темы"}), 400
 
+    _cleanup_tasks()
     task_id = datetime.now().strftime("%Y%m%d%H%M%S%f")
-    tasks[task_id] = {"status": "running"}
+    tasks[task_id] = {"status": "running", "ts": time.time()}
 
     min_words = int(body.get("min_words") or config.ARTICLE_MIN_WORDS)
     photos_count = int(body.get("photos_count") or config.PHOTOS_PER_ARTICLE)
@@ -1035,7 +1047,7 @@ def api_generate():
                 "reviews": article.reviews,
                 "conclusion": article.conclusion,
                 "image_alts": article.image_alts,
-            }, ensure_ascii=False)
+            }, ensure_ascii=False).replace("-->", "--\u003e")
 
             html = f"""<!DOCTYPE html>
 <html lang="ru"><head><meta charset="utf-8">
@@ -1095,10 +1107,10 @@ p{{margin:.8em 0}}ul{{margin:.5em 0 1em 1.5em}}.meta{{color:#888;font-size:.9em;
                 if result:
                     entry_url = result.get("url") or f"https://vc.ru/id/{result.get('id','?')}"
 
-            tasks[task_id] = {"status": "done", "url": entry_url, "filename": filepath.name}
+            tasks[task_id] = {"status": "done", "url": entry_url, "filename": filepath.name, "ts": time.time()}
 
         except Exception as e:
-            tasks[task_id] = {"status": "error", "error": str(e)}
+            tasks[task_id] = {"status": "error", "error": str(e), "ts": time.time()}
 
     threading.Thread(target=worker, daemon=True).start()
     return jsonify({"task_id": task_id})
@@ -1112,14 +1124,17 @@ def api_task(task_id):
 @app.route("/api/publish", methods=["POST"])
 def api_publish():
     body = request.get_json()
-    filename = body.get("filename")
+    filename = body.get("filename", "")
+    # Защита от path traversal
+    if not filename or ".." in filename or "/" in filename or "\\" in filename:
+        return jsonify({"ok": False, "error": "Некорректное имя файла"})
     path = ARTICLES_DIR / filename
     if not path.exists():
         return jsonify({"ok": False, "error": "Файл не найден"})
 
     try:
         html = path.read_text(encoding="utf-8")
-        json_m = re.search(r"<!--JSON:(.*?)-->", html, re.S)
+        json_m = re.search(r"<!--JSON:([\s\S]*?)-->", html)
         if not json_m:
             return jsonify({"ok": False, "error": "Нет данных статьи в файле"})
 
@@ -1128,11 +1143,21 @@ def api_publish():
         data = _json.loads(json_m.group(1))
         article = GeneratedArticle(
             title=data["title"],
-            intro=data.get("intro", ""),
-            sections=data.get("sections", []),
-            conclusion=data.get("conclusion", ""),
             meta_description=data.get("meta_description", ""),
             keywords=data.get("keywords", []),
+            breadcrumbs=data.get("breadcrumbs", []),
+            brief=data.get("brief", ""),
+            intro=data.get("intro", ""),
+            about_text=data.get("about_text", ""),
+            sections=data.get("sections", []),
+            specs_table=data.get("specs_table", []),
+            faq=data.get("faq", []),
+            comparison=data.get("comparison", []),
+            for_whom=data.get("for_whom", []),
+            expert_comment=data.get("expert_comment", ""),
+            reviews=data.get("reviews", []),
+            conclusion=data.get("conclusion", ""),
+            image_alts=data.get("image_alts", []),
         )
 
         photos = pick_photos(config.PHOTOS_DIR, count=config.PHOTOS_PER_ARTICLE)

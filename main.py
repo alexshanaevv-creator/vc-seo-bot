@@ -78,13 +78,18 @@ def process_topic(
         article = generate_article(
             topic_title=topic.title,
             topic_description=topic.description,
+            article_type="general",
             niche_keywords=config.NICHE_KEYWORDS,
             site_url=config.YOUR_SITE_URL,
             site_anchor=config.YOUR_SITE_ANCHOR,
-            api_key=config.ANTHROPIC_API_KEY,
+            claude_api_key=config.ANTHROPIC_API_KEY,
+            gemini_api_key=config.GEMINI_API_KEY,
             min_words=config.ARTICLE_MIN_WORDS,
             links_count=config.ARTICLE_LINKS_COUNT,
             tone=config.ARTICLE_TONE,
+            llm_provider=config.LLM_PROVIDER,
+            claude_model=config.CLAUDE_MODEL,
+            gemini_model=config.GEMINI_MODEL,
             image_count=config.PHOTOS_PER_ARTICLE,
         )
     except Exception as e:
@@ -204,17 +209,18 @@ def run(
     logger.info(f"New topics available: {len(new_topics)}, will process: {min(count, len(new_topics))}")
 
     success_count = 0
-    for topic in new_topics[:count]:
+    to_process = new_topics[:count]
+    for i, topic in enumerate(to_process):
         ok = process_topic(topic, publisher, publish=publish)
         if ok:
             processed.add(topic.title)
             save_processed(processed)
             success_count += 1
-        # Пауза между статьями чтобы не нагружать API
-        if success_count < min(count, len(new_topics)):
+        # Пауза между статьями чтобы не нагружать API (не после последней)
+        if i < len(to_process) - 1:
             time.sleep(5)
 
-    logger.info(f"Done. {success_count}/{min(count, len(new_topics))} articles processed.")
+    logger.info(f"Done. {success_count}/{len(to_process)} articles processed.")
 
 
 # ─── CLI ─────────────────────────────────────────────────────────────────────

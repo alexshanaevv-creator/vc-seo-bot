@@ -137,7 +137,7 @@ class VcPublisher:
             blocks.append(self._image_block(img_queue.pop(0)))
 
         # ── Основные разделы
-        video_index = 0
+        image_index = 0
         for section in article.sections:
             heading = section.get("heading", "")
             paragraphs = section.get("paragraphs", [])
@@ -158,10 +158,10 @@ class VcPublisher:
 
             if has_photo and img_queue:
                 alt = ""
-                if video_index < len(article.image_alts):
-                    alt = article.image_alts[video_index]
+                if image_index < len(article.image_alts):
+                    alt = article.image_alts[image_index]
                 blocks.append(self._image_block(img_queue.pop(0), caption=alt))
-                video_index += 1
+                image_index += 1
 
             if has_video and video_html:
                 blocks.append(self._embed_block(video_html))

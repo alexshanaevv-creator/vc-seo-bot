@@ -134,7 +134,7 @@ def fetch_google_news(keyword: str, lang: str = "ru", country: str = "RU") -> li
 def fetch_yandex_news(keyword: str) -> list[Topic]:
     """Получает новости Яндекса по ключевому слову."""
     q = urllib.parse.quote(keyword)
-    url = f"https://news.yandex.ru/search.rss?text={q}&grhow=clutster"
+    url = f"https://news.yandex.ru/search.rss?text={q}&grhow=cluster"
     xml = _fetch(url)
     if not xml:
         return []

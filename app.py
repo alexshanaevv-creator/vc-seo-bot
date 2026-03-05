@@ -191,20 +191,42 @@ TEMPLATE = """<!DOCTYPE html>
     <div class="panel">
       <div class="panel-head">✍️ Написать статью</div>
       <div class="panel-body">
-        <label>Тема статьи</label>
-        <input type="text" id="topic" placeholder="Например: Как выбрать массажное кресло в 2025 году">
+        <label>Главный ключевой запрос</label>
+        <input type="text" id="topic" placeholder="Например: массажное кресло Osari Pro 3000 купить">
 
-        <label>Доп. контекст (необязательно)</label>
-        <textarea id="description" placeholder="Что важно упомянуть, акценты..."></textarea>
+        <label>Дополнительный контекст (необязательно)</label>
+        <textarea id="description" placeholder="Уточнения, акценты, особые пожелания..."></textarea>
 
         <label>Тип статьи</label>
-        <select id="article_type">
+        <select id="article_type" onchange="switchArticleType()">
           <option value="general">Общетематическая (Gemini Flash — бесплатно)</option>
-          <option value="expert">Экспертная (Claude Opus — только позитив)</option>
+          <option value="brand">Брендовая (о бренде или продукте)</option>
+          <option value="expert">Экспертная (Claude Opus — узкая тематика)</option>
         </select>
 
-        <label>Характеристики товара/услуги (необязательно)</label>
-        <textarea id="product_specs" placeholder="Модель, цена, технические параметры, особенности...&#10;Используется для точных цифр в статье." style="height:80px;"></textarea>
+        <!-- Поля для Брендовой статьи -->
+        <div id="brandFields" style="display:none;margin-top:10px;border:1px solid var(--border);border-radius:8px;padding:12px 14px;background:#fffbeb;">
+          <div style="font-size:.85rem;font-weight:600;margin-bottom:8px;color:#92400e;">📦 Источник данных о бренде</div>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;">
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;margin:0;">
+              <input type="radio" name="brand_source" value="search" id="brandSourceSearch" onchange="switchBrandSource()" checked>
+              Из свободного поиска (автоматически)
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;margin:0;">
+              <input type="radio" name="brand_source" value="manual" id="brandSourceManual" onchange="switchBrandSource()">
+              На основе внесённых данных
+            </label>
+          </div>
+          <div id="brandDataInput" style="display:none;">
+            <textarea id="brand_data" placeholder="Вставьте данные о бренде: описание, преимущества, характеристики, УТП..." style="height:100px;font-size:.85rem;"></textarea>
+          </div>
+        </div>
+
+        <!-- Поля для Экспертной статьи -->
+        <div id="expertFields" style="display:none;margin-top:10px;border:1px solid var(--border);border-radius:8px;padding:12px 14px;background:#f0fdf4;">
+          <div style="font-size:.85rem;font-weight:600;margin-bottom:6px;color:#15803d;">🔬 Конфигурация (обязательно для экспертной статьи)</div>
+          <textarea id="product_specs" placeholder="Модель, бренд, цена, технические характеристики, параметры, ключевые особенности...&#10;Используется для точных цифр и фактов в статье." style="height:110px;font-size:.85rem;"></textarea>
+        </div>
 
         <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-top:2px;">
           <div style="padding:10px 14px;background:var(--gray);font-weight:600;font-size:.85rem;cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="toggleSection('webSearchSection')">
@@ -223,31 +245,39 @@ TEMPLATE = """<!DOCTYPE html>
 
         <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-top:8px;">
           <div style="padding:10px 14px;background:var(--gray);font-weight:600;font-size:.85rem;cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="toggleSection('rutubeSection')">
-            📹 Видео RuTube <span id="rutubeSectionToggle">▼</span>
+            📹 Видео RuTube <span id="rutubeSectionToggle">▶</span>
           </div>
-          <div id="rutubeSection" style="display:block;padding:12px 14px;">
-            <div style="display:flex;gap:8px;margin-bottom:8px;">
-              <input type="text" id="rutubeQuery" placeholder="Запрос для поиска видео..." style="flex:1;">
-              <button class="btn btn-sm btn-ghost" onclick="searchRutube()">Найти</button>
+          <div id="rutubeSection" style="display:none;padding:12px 14px;">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+              <div style="font-size:.83rem;color:var(--muted);">Количество видео:</div>
+              <select id="rutubeCount" onchange="updateRutubeFields()" style="width:auto;padding:6px 10px;">
+                <option value="0">Без видео</option>
+                <option value="1">1 видео</option>
+                <option value="2">2 видео</option>
+                <option value="3">3 видео</option>
+                <option value="4">4 видео</option>
+                <option value="5">5 видео</option>
+              </select>
             </div>
-            <div id="rutubeResults" style="font-size:.82rem;max-height:200px;overflow-y:auto;"></div>
-            <div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
-              <div style="font-size:.8rem;color:var(--muted);margin-bottom:4px;">Или вставьте ссылку на видео RuTube:</div>
-              <div style="display:flex;gap:8px;">
-                <input type="text" id="rutubeUrlInput" placeholder="https://rutube.ru/video/..." style="flex:1;font-size:.82rem;">
-                <button class="btn btn-sm btn-ghost" onclick="addRutubeByUrl()">Добавить</button>
+            <div id="rutubeFields" style="display:flex;flex-direction:column;gap:6px;"></div>
+            <button class="btn btn-sm btn-ghost" style="margin-top:8px;" onclick="addRutubeField()">+ Добавить поле</button>
+            <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
+              <div style="font-size:.8rem;color:var(--muted);margin-bottom:4px;">Поиск видео RuTube:</div>
+              <div style="display:flex;gap:8px;margin-bottom:8px;">
+                <input type="text" id="rutubeQuery" placeholder="Запрос для поиска..." style="flex:1;font-size:.82rem;">
+                <button class="btn btn-sm btn-ghost" onclick="searchRutube()">Найти</button>
               </div>
+              <div id="rutubeResults" style="font-size:.82rem;max-height:160px;overflow-y:auto;"></div>
             </div>
-            <div id="selectedVideos" style="margin-top:8px;font-size:.82rem;"></div>
           </div>
         </div>
 
         <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-top:8px;">
           <div style="padding:10px 14px;background:var(--gray);font-weight:600;font-size:.85rem;cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="toggleSection('photosSection')">
-            🖼️ Фотографии для статьи <span id="photosSectionToggle">▼</span>
+            🖼️ Фотографии для статьи <span id="photosSectionToggle">▶</span>
           </div>
-          <div id="photosSection" style="display:block;padding:12px 14px;">
-            <div style="display:flex;gap:12px;margin-bottom:10px;">
+          <div id="photosSection" style="display:none;padding:12px 14px;">
+            <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
               <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;">
                 <input type="radio" name="photo_source" value="yandex" id="photoYandex" onchange="switchPhotoSource()"> Яндекс.Диск
               </label>
@@ -258,22 +288,51 @@ TEMPLATE = """<!DOCTYPE html>
                 <input type="radio" name="photo_source" value="manual" id="photoManual" onchange="switchPhotoSource()"> Прямые ссылки
               </label>
             </div>
+
+            <!-- Яндекс.Диск -->
             <div id="photoYandexInput" style="display:none;">
-              <div style="display:flex;gap:8px;">
+              <div style="display:flex;gap:8px;margin-bottom:8px;">
                 <input type="text" id="yandexDiskUrl" placeholder="https://disk.yandex.ru/d/..." style="flex:1;">
                 <button class="btn btn-sm btn-ghost" onclick="loadYandexDisk()">Загрузить</button>
               </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+                <div>
+                  <div style="font-size:.8rem;color:var(--muted);margin-bottom:4px;">Кол-во фото:</div>
+                  <select id="yandexPhotoCount" style="padding:6px 10px;">
+                    <option value="1">1 фото</option>
+                    <option value="2">2 фото</option>
+                    <option value="3" selected>3 фото</option>
+                    <option value="4">4 фото</option>
+                    <option value="5">5 фото</option>
+                  </select>
+                </div>
+                <div>
+                  <div style="font-size:.8rem;color:var(--muted);margin-bottom:4px;">Режим выбора:</div>
+                  <select id="yandexPhotoMode" style="padding:6px 10px;">
+                    <option value="sequential">По кругу (последовательно)</option>
+                    <option value="random">Случайный порядок</option>
+                  </select>
+                </div>
+              </div>
             </div>
+
+            <!-- Pexels -->
             <div id="photoPexelsInput">
               <div style="display:flex;gap:8px;">
                 <input type="text" id="pexelsQuery" placeholder="Запрос для поиска фото..." style="flex:1;">
                 <button class="btn btn-sm btn-ghost" onclick="searchPexels()">Найти</button>
               </div>
             </div>
+
+            <!-- Прямые ссылки -->
             <div id="photoManualInput" style="display:none;">
-              <textarea id="manualPhotoUrls" placeholder="Вставьте ссылки на фото (по одной на строку)..." style="height:80px;font-size:.82rem;"></textarea>
-              <button class="btn btn-sm btn-ghost" style="margin-top:4px;" onclick="addManualPhotoUrls()">Добавить ссылки</button>
+              <div style="font-size:.8rem;color:var(--muted);margin-bottom:6px;">Ссылки на фото (до 5 штук):</div>
+              <div id="manualPhotoFields" style="display:flex;flex-direction:column;gap:6px;">
+                <input type="text" class="manual-photo-url" placeholder="https://example.com/photo1.jpg" style="font-size:.82rem;">
+              </div>
+              <button class="btn btn-sm btn-ghost" style="margin-top:6px;" onclick="addManualPhotoField()">+ Добавить поле</button>
             </div>
+
             <div id="photoResults" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px;max-height:200px;overflow-y:auto;"></div>
             <div id="selectedPhotosInfo" style="margin-top:6px;font-size:.8rem;color:var(--muted);"></div>
           </div>
@@ -370,7 +429,6 @@ let articles = [];
 let currentArticle = null;
 let currentTask = null;
 let pollInterval = null;
-let selectedVideoEmbeds = [];
 
 function toggleSection(id) {
   const el = document.getElementById(id);
@@ -382,6 +440,94 @@ function toggleSection(id) {
     el.style.display = 'none';
     if (toggle) toggle.textContent = '▶';
   }
+}
+
+// ─── Тип статьи ────────────────────────────────────────────────────────────
+
+function switchArticleType() {
+  const type = document.getElementById('article_type').value;
+  document.getElementById('brandFields').style.display = type === 'brand' ? 'block' : 'none';
+  document.getElementById('expertFields').style.display = type === 'expert' ? 'block' : 'none';
+}
+
+function switchBrandSource() {
+  const src = document.querySelector('input[name="brand_source"]:checked').value;
+  document.getElementById('brandDataInput').style.display = src === 'manual' ? 'block' : 'none';
+}
+
+// ─── RuTube — динамические поля ────────────────────────────────────────────
+
+function updateRutubeFields() {
+  const count = parseInt(document.getElementById('rutubeCount').value) || 0;
+  const container = document.getElementById('rutubeFields');
+  const current = container.querySelectorAll('input').length;
+  if (count > current) {
+    for (let i = current; i < count; i++) {
+      container.appendChild(makeRutubeField(i + 1));
+    }
+  } else {
+    const inputs = container.querySelectorAll('.rutube-field-row');
+    for (let i = inputs.length - 1; i >= count; i--) {
+      inputs[i].remove();
+    }
+  }
+}
+
+function makeRutubeField(num) {
+  const row = document.createElement('div');
+  row.className = 'rutube-field-row';
+  row.style.cssText = 'display:flex;gap:6px;align-items:center;';
+  row.innerHTML = `
+    <span style="font-size:.8rem;color:var(--muted);min-width:20px;">${num}.</span>
+    <input type="text" class="rutube-url" placeholder="https://rutube.ru/video/..." style="flex:1;font-size:.82rem;">
+    <button class="btn btn-sm btn-ghost" style="padding:6px 8px;color:var(--red);" onclick="this.closest('.rutube-field-row').remove();renumberRutubeFields();">✕</button>
+  `;
+  return row;
+}
+
+function addRutubeField() {
+  const container = document.getElementById('rutubeFields');
+  const num = container.querySelectorAll('.rutube-field-row').length + 1;
+  container.appendChild(makeRutubeField(num));
+  const sel = document.getElementById('rutubeCount');
+  if (parseInt(sel.value) < num) sel.value = num;
+}
+
+function renumberRutubeFields() {
+  const rows = document.getElementById('rutubeFields').querySelectorAll('.rutube-field-row');
+  rows.forEach((row, i) => { row.querySelector('span').textContent = (i + 1) + '.'; });
+}
+
+function getRutubeEmbeds() {
+  const embeds = [];
+  document.querySelectorAll('.rutube-url').forEach(inp => {
+    const url = inp.value.trim();
+    if (!url) return;
+    const m = url.match(/rutube\.ru\/(?:video|play\/embed)\/([a-zA-Z0-9]+)/);
+    if (m) {
+      const id = m[1];
+      embeds.push(`<iframe width="720" height="405" src="https://rutube.ru/play/embed/${id}/" frameBorder="0" allow="clipboard-write; autoplay" webkitAllowFullScreen mozallowfullscreen allowFullScreen></iframe>`);
+    }
+  });
+  return embeds;
+}
+
+// ─── Фото — прямые ссылки ──────────────────────────────────────────────────
+
+function addManualPhotoField() {
+  const container = document.getElementById('manualPhotoFields');
+  if (container.querySelectorAll('input').length >= 5) { showToast('Максимум 5 фото'); return; }
+  const inp = document.createElement('input');
+  inp.type = 'text';
+  inp.className = 'manual-photo-url';
+  inp.placeholder = `https://example.com/photo${container.querySelectorAll('input').length + 1}.jpg`;
+  inp.style.fontSize = '.82rem';
+  container.appendChild(inp);
+}
+
+function getManualPhotoUrls() {
+  return Array.from(document.querySelectorAll('.manual-photo-url'))
+    .map(i => i.value.trim()).filter(u => u.length > 0);
 }
 
 async function searchWeb() {
@@ -448,7 +594,7 @@ async function searchRutube() {
           <div style="flex:1;min-width:0;">
             <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${v.title}</div>
             <button class="btn btn-sm btn-ghost" style="font-size:.75rem;padding:2px 8px;margin-top:4px;"
-              onclick='addVideo(${JSON.stringify(v)})'>+ Добавить в статью</button>
+              onclick='addVideoFromSearch(${JSON.stringify(v)})'>+ В поле</button>
           </div>
         </div>
       `).join('');
@@ -460,55 +606,24 @@ async function searchRutube() {
   btn.disabled = false;
 }
 
-function addVideo(v) {
-  if (selectedVideoEmbeds.find(x => x.id === v.id)) { showToast('Видео уже добавлено'); return; }
-  selectedVideoEmbeds.push(v);
-  renderSelectedVideos();
-  showToast('Видео добавлено в статью');
-}
-
-function removeVideo(id) {
-  selectedVideoEmbeds = selectedVideoEmbeds.filter(v => v.id !== id);
-  renderSelectedVideos();
-}
-
-function renderSelectedVideos() {
-  const el = document.getElementById('selectedVideos');
-  if (!selectedVideoEmbeds.length) { el.innerHTML = ''; return; }
-  el.innerHTML = '<div style="font-weight:600;margin-bottom:6px;">Выбрано для статьи:</div>' +
-    selectedVideoEmbeds.map(v => `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;">
-        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${v.title}</span>
-        <button class="btn btn-sm btn-ghost" style="font-size:.75rem;padding:2px 8px;margin-left:8px;color:var(--red);"
-          onclick="removeVideo('${v.id}')">✕</button>
-      </div>
-    `).join('');
-}
-
-function addRutubeByUrl() {
-  const url = document.getElementById('rutubeUrlInput').value.trim();
-  if (!url) return;
-  const m = url.match(/rutube\.ru\/(?:video|play\/embed)\/([a-zA-Z0-9]+)/);
-  if (!m) { showToast('Не удалось распознать ссылку RuTube'); return; }
-  const videoId = m[1];
-  const embed = `<iframe width="720" height="405" src="https://rutube.ru/play/embed/${videoId}/" frameBorder="0" allow="clipboard-write; autoplay" webkitAllowFullScreen mozallowfullscreen allowFullScreen></iframe>`;
-  if (selectedVideoEmbeds.find(x => x.id === videoId)) { showToast('Видео уже добавлено'); return; }
-  selectedVideoEmbeds.push({ id: videoId, title: 'Видео: ' + url, embed_html: embed });
-  renderSelectedVideos();
-  document.getElementById('rutubeUrlInput').value = '';
-  showToast('Видео добавлено');
-}
-
-function addManualPhotoUrls() {
-  const urls = document.getElementById('manualPhotoUrls').value
-    .split('\n').map(u => u.trim()).filter(u => u.length > 0);
-  if (!urls.length) return;
-  urls.forEach(url => {
-    if (!selectedPhotoUrls.includes(url)) selectedPhotoUrls.push(url);
-  });
-  document.getElementById('selectedPhotosInfo').textContent =
-    selectedPhotoUrls.length ? `Выбрано: ${selectedPhotoUrls.length} фото` : '';
-  showToast(`Добавлено ${urls.length} фото`);
+function addVideoFromSearch(v) {
+  // Вставляет URL из поиска в первое свободное поле
+  const container = document.getElementById('rutubeFields');
+  const inputs = container.querySelectorAll('.rutube-url');
+  const embed_url = v.embed_html ? v.embed_html.match(/src="([^"]+)"/)?.[1] : null;
+  const video_url = embed_url ? embed_url.replace('/play/embed/', '/video/').replace(/\/$/, '') : '';
+  for (const inp of inputs) {
+    if (!inp.value.trim()) {
+      inp.value = video_url || v.id;
+      showToast('Видео добавлено в поле');
+      return;
+    }
+  }
+  // Нет свободных полей — добавляем новое
+  addRutubeField();
+  const newInputs = container.querySelectorAll('.rutube-url');
+  newInputs[newInputs.length - 1].value = video_url || v.id;
+  showToast('Видео добавлено в новое поле');
 }
 
 // ─── Photos ────────────────────────────────────────────────────────────────
@@ -743,7 +858,15 @@ function showPreview(data) {
 
 async function generateArticle() {
   const topic = document.getElementById('topic').value.trim();
-  if (!topic) { showToast('Введите тему статьи'); return; }
+  if (!topic) { showToast('Введите главный ключевой запрос'); return; }
+
+  const articleType = document.getElementById('article_type').value;
+
+  // Проверка обязательных полей для экспертной
+  if (articleType === 'expert') {
+    const specs = document.getElementById('product_specs').value.trim();
+    if (!specs) { showToast('Для экспертной статьи заполните конфигурацию'); return; }
+  }
 
   const mode = document.getElementById('publish_mode').value;
   const publish = mode === 'publish';
@@ -751,8 +874,26 @@ async function generateArticle() {
   const minWords = parseInt(document.getElementById('article_length').value);
   const photosCount = parseInt(document.getElementById('photos_count').value);
 
+  // Данные о бренде
+  const brandSource = document.querySelector('input[name="brand_source"]:checked')?.value || 'search';
+  const brandData = (articleType === 'brand' && brandSource === 'manual')
+    ? document.getElementById('brand_data').value : '';
+
+  // Видео — собираем из полей
+  const videoEmbeds = getRutubeEmbeds();
+
+  // Фото
+  const photoSource = document.querySelector('input[name="photo_source"]:checked')?.value || 'pexels';
+  let photoUrls = selectedPhotoUrls;
+  if (photoSource === 'manual') {
+    photoUrls = getManualPhotoUrls();
+  }
+  const yandexDiskUrl = document.getElementById('yandexDiskUrl')?.value.trim() || '';
+  const yandexPhotoCount = parseInt(document.getElementById('yandexPhotoCount')?.value || '3');
+  const yandexPhotoMode = document.getElementById('yandexPhotoMode')?.value || 'sequential';
+
   document.getElementById('genBtn').disabled = true;
-  showProgress('Отправляем запрос к Claude AI...');
+  showProgress('Отправляем запрос к AI...');
 
   const res = await fetch('/api/generate', {
     method: 'POST',
@@ -760,11 +901,17 @@ async function generateArticle() {
     body: JSON.stringify({
       topic,
       description: document.getElementById('description').value,
-      article_type: document.getElementById('article_type').value,
-      product_specs: document.getElementById('product_specs').value,
+      article_type: articleType,
+      product_specs: articleType === 'expert' ? document.getElementById('product_specs').value : '',
+      brand_data: brandData,
+      brand_source: brandSource,
       research_data: document.getElementById('research_data').value,
-      video_embeds: selectedVideoEmbeds.map(v => v.embed_html),
-      photo_urls: selectedPhotoUrls,
+      video_embeds: videoEmbeds,
+      photo_source: photoSource,
+      photo_urls: photoUrls,
+      yandex_disk_url: yandexDiskUrl,
+      yandex_photo_count: yandexPhotoCount,
+      yandex_photo_mode: yandexPhotoMode,
       publish,
       local_only: localOnly,
       min_words: minWords,
@@ -991,12 +1138,22 @@ def api_generate():
 
     def worker():
         try:
+            article_type = body.get("article_type", "general")
+            brand_data = body.get("brand_data", "")
+            brand_source = body.get("brand_source", "search")
+
+            # Для брендовой статьи с ручными данными — добавляем в research_data
+            research_data = body.get("research_data", "")
+            if article_type == "brand" and brand_source == "manual" and brand_data.strip():
+                brand_block = f"\nДАННЫЕ О БРЕНДЕ (приоритет):\n{brand_data}\n"
+                research_data = brand_block + research_data
+
             article = generate_article(
                 topic_title=topic,
                 topic_description=body.get("description", ""),
                 product_specs=body.get("product_specs", ""),
-                research_data=body.get("research_data", ""),
-                article_type=body.get("article_type", "general"),
+                research_data=research_data,
+                article_type=article_type,
                 niche_keywords=config.NICHE_KEYWORDS,
                 site_url=config.YOUR_SITE_URL,
                 site_anchor=config.YOUR_SITE_ANCHOR,
@@ -1072,14 +1229,25 @@ p{{margin:.8em 0}}ul{{margin:.5em 0 1em 1.5em}}.meta{{color:#888;font-size:.9em;
             entry_url = None
 
             if not local_only:
+                photo_source = body.get("photo_source", "pexels")
                 photo_urls = body.get("photo_urls", [])
-                if photo_urls:
-                    from photos import DOWNLOAD_DIR
-                    import requests as _req
-                    import shutil as _shutil
+                yandex_disk_url = body.get("yandex_disk_url", "")
+                yandex_photo_count = int(body.get("yandex_photo_count", photos_count))
+                yandex_photo_mode = body.get("yandex_photo_mode", "sequential")
+
+                from photos import DOWNLOAD_DIR, fetch_yandex_disk_images_by_mode
+                import requests as _req
+                import shutil as _shutil
+
+                photos = []
+
+                if photo_source == "yandex" and yandex_disk_url:
+                    photos = fetch_yandex_disk_images_by_mode(
+                        yandex_disk_url, count=yandex_photo_count, mode=yandex_photo_mode
+                    )
+                elif photo_source == "manual" and photo_urls:
                     DOWNLOAD_DIR.mkdir(exist_ok=True)
-                    photos = []
-                    for i, url in enumerate(photo_urls[:photos_count]):
+                    for i, url in enumerate(photo_urls[:5]):
                         ext = url.split("?")[0].rsplit(".", 1)[-1].lower()
                         if ext not in ("jpg", "jpeg", "png", "webp", "gif"):
                             ext = "jpg"
@@ -1093,9 +1261,24 @@ p{{margin:.8em 0}}ul{{margin:.5em 0 1em 1.5em}}.meta{{color:#888;font-size:.9em;
                             photos.append(local)
                         except Exception as dl_err:
                             logger.warning(f"Photo download failed {url}: {dl_err}")
-                    if not photos:
-                        photos = pick_photos(config.PHOTOS_DIR, count=photos_count)
-                else:
+                elif photo_source == "pexels" and photo_urls:
+                    DOWNLOAD_DIR.mkdir(exist_ok=True)
+                    for i, url in enumerate(photo_urls[:photos_count]):
+                        ext = url.split("?")[0].rsplit(".", 1)[-1].lower()
+                        if ext not in ("jpg", "jpeg", "png", "webp", "gif"):
+                            ext = "jpg"
+                        local = DOWNLOAD_DIR / f"pexels_{i}.{ext}"
+                        try:
+                            r = _req.get(url, timeout=30, stream=True,
+                                         headers={"User-Agent": "Mozilla/5.0"})
+                            r.raise_for_status()
+                            with open(local, "wb") as f:
+                                _shutil.copyfileobj(r.raw, f)
+                            photos.append(local)
+                        except Exception as dl_err:
+                            logger.warning(f"Pexels photo download failed {url}: {dl_err}")
+
+                if not photos:
                     photos = pick_photos(config.PHOTOS_DIR, count=photos_count)
                 pub = VcPublisher(token=config.VC_TOKEN, base_url=config.VC_BASE_URL)
                 result = pub.publish_article(

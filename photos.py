@@ -139,6 +139,36 @@ def fetch_yandex_disk_images(public_url: str, count: int = 3) -> list:
     return downloaded
 
 
+def fetch_yandex_disk_images_by_mode(public_url: str, count: int = 3, mode: str = "sequential") -> list:
+    """Скачивает N изображений из публичной папки с учётом режима.
+
+    mode="sequential" — по кругу: запоминает сдвиг в usage-файле, каждый раз берёт следующие N.
+    mode="random"     — случайный порядок: каждый раз случайные N из всего набора.
+    """
+    items = list_yandex_disk_images(public_url)
+    if not items:
+        return []
+
+    OFFSET_KEY = f"__ydisk_offset__{public_url}"
+
+    if mode == "random":
+        selected = random.sample(items, min(count, len(items)))
+    else:  # sequential
+        usage = _load_usage()
+        offset = usage.get(OFFSET_KEY, 0)
+        total = len(items)
+        selected = [items[(offset + i) % total] for i in range(min(count, total))]
+        usage[OFFSET_KEY] = (offset + count) % total
+        _save_usage(usage)
+
+    downloaded = []
+    for item in selected:
+        p = download_yandex_disk_file(public_url, item["path"], item["name"])
+        if p:
+            downloaded.append(p)
+    return downloaded
+
+
 # ─── Pexels API ───────────────────────────────────────────────────────────────
 
 def search_pexels_images(query: str, api_key: str, count: int = 6) -> list:

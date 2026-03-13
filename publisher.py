@@ -160,6 +160,13 @@ class VcPublisher:
         publish=False → сохраняет как черновик.
         publish=True  → публикует немедленно.
         """
+        # Если subsite_id не задан — получаем ID личного блога пользователя
+        if not subsite_id:
+            me = self.get_me()
+            if me and me.get("id"):
+                subsite_id = me["id"]
+                logger.info(f"subsite_id не задан, используем личный блог пользователя: {subsite_id}")
+
         payload = {
             "title": article.title,
             "text": json.dumps({"blocks": blocks, "version": "2.14"}),
@@ -216,17 +223,34 @@ class VcPublisher:
             publish=publish,
         )
 
-    def check_token(self) -> dict:
-        """Проверяет валидность токена. Возвращает {'ok': bool, 'user': str, 'error': str}."""
+    def get_me(self) -> Optional[dict]:
+        """Возвращает данные текущего пользователя из API или None при ошибке."""
         try:
             resp = self.session.get(f"{self.base_url}/auth/me", timeout=15)
             resp.raise_for_status()
-            data = resp.json()
-            user = data.get("result", {})
-            name = user.get("name") or user.get("login") or str(user.get("id", "?"))
-            return {"ok": True, "user": name}
+            return resp.json().get("result", {})
         except Exception as e:
-            api_response = ""
-            if hasattr(e, "response") and e.response is not None:
-                api_response = e.response.text[:300]
-            return {"ok": False, "error": f"{e}" + (f" | {api_response}" if api_response else "")}
+            logger.error(f"get_me failed: {e}")
+            return None
+
+    def get_subsites(self) -> list[dict]:
+        """Возвращает список проектов/блогов пользователя."""
+        try:
+            resp = self.session.get(f"{self.base_url}/user/me/subsites", timeout=15)
+            resp.raise_for_status()
+            data = resp.json()
+            items = data.get("result", data) if isinstance(data.get("result"), list) else []
+            return items
+        except Exception as e:
+            logger.warning(f"get_subsites failed: {e}")
+            return []
+
+    def check_token(self) -> dict:
+        """Проверяет валидность токена. Возвращает {'ok': bool, 'user': str, 'id': int, 'error': str}."""
+        user = self.get_me()
+        if user is None:
+            return {"ok": False, "error": "Не удалось получить данные пользователя"}
+        if not user:
+            return {"ok": False, "error": "Токен недействителен"}
+        name = user.get("name") or user.get("login") or str(user.get("id", "?"))
+        return {"ok": True, "user": name, "id": user.get("id")}

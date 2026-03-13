@@ -190,11 +190,19 @@ TEMPLATE = """<!DOCTYPE html>
         <textarea id="description" placeholder="Что важно упомянуть, акценты..."></textarea>
 
         <label>Режим публикации</label>
-        <select id="publish_mode">
+        <select id="publish_mode" onchange="onModeChange()">
           <option value="draft">Сохранить как черновик на VC.RU</option>
           <option value="local">Только сохранить локально (без VC.RU)</option>
           <option value="publish">Опубликовать сразу на VC.RU</option>
         </select>
+
+        <div id="projectWrap" style="margin-top:10px;">
+          <label>Проект / блог на VC.RU</label>
+          <select id="project_id" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.9rem;font-family:inherit;color:var(--text);background:#fff;">
+            <option value="">— загрузка проектов... —</option>
+          </select>
+          <div id="projectError" style="font-size:.78rem;color:var(--red);margin-top:4px;display:none;"></div>
+        </div>
 
         <button class="btn btn-primary" id="genBtn" onclick="generateArticle()">
           ⚡ Сгенерировать статью
@@ -257,6 +265,7 @@ let articles = [];
 let currentArticle = null;
 let currentTask = null;
 let pollInterval = null;
+let projects = [];
 
 // ─── Load articles ─────────────────────────────────────────────────────────
 
@@ -334,6 +343,7 @@ async function generateArticle() {
   document.getElementById('genBtn').disabled = true;
   showProgress('Отправляем запрос к Claude AI...');
 
+  const projectId = document.getElementById('project_id').value;
   const res = await fetch('/api/generate', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -342,6 +352,7 @@ async function generateArticle() {
       description: document.getElementById('description').value,
       publish,
       local_only: localOnly,
+      project_id: projectId ? parseInt(projectId) : null,
     })
   });
   const data = await res.json();
@@ -422,10 +433,14 @@ function openHtml() {
 async function publishCurrent() {
   if (!currentArticle) return;
   showToast('🚀 Публикуем на VC.RU...');
+  const projectId = document.getElementById('project_id').value;
   const res = await fetch('/api/publish', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ filename: currentArticle.filename })
+    body: JSON.stringify({
+      filename: currentArticle.filename,
+      project_id: projectId ? parseInt(projectId) : null,
+    })
   });
   const data = await res.json();
   if (data.ok) showToast('✅ Опубликовано: ' + (data.url || ''), 5000);
@@ -470,8 +485,40 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
 
+// ─── Projects ─────────────────────────────────────────────────────────────
+
+async function loadProjects() {
+  try {
+    const res = await fetch('/api/projects');
+    const data = await res.json();
+    projects = data.projects || [];
+    const sel = document.getElementById('project_id');
+    const errEl = document.getElementById('projectError');
+    if (!projects.length) {
+      sel.innerHTML = '<option value="">— нет доступных проектов —</option>';
+      if (!data.ok && data.error) {
+        errEl.textContent = data.error;
+        errEl.style.display = 'block';
+      }
+    } else {
+      sel.innerHTML = projects.map(p =>
+        `<option value="${p.id}">${p.name}${p.type === 'personal' ? ' (личный блог)' : ''}</option>`
+      ).join('');
+      errEl.style.display = 'none';
+    }
+  } catch (e) {
+    document.getElementById('project_id').innerHTML = '<option value="">— ошибка загрузки —</option>';
+  }
+}
+
+function onModeChange() {
+  const mode = document.getElementById('publish_mode').value;
+  document.getElementById('projectWrap').style.display = mode === 'local' ? 'none' : 'block';
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────
 loadArticles();
+loadProjects();
 </script>
 </body>
 </html>"""
@@ -619,6 +666,7 @@ p{{margin:.8em 0}}ul{{margin:.5em 0 1em 1.5em}}.meta{{color:#888;font-size:.9em;
             # Публикуем если нужно
             publish = body.get("publish", False)
             local_only = body.get("local_only", False)
+            project_id = body.get("project_id") or config.VC_SUBSITE_ID
             entry_url = None
 
             if not local_only:
@@ -627,7 +675,7 @@ p{{margin:.8em 0}}ul{{margin:.5em 0 1em 1.5em}}.meta{{color:#888;font-size:.9em;
                 result = pub.publish_article(
                     article=article,
                     image_paths=photos,
-                    subsite_id=config.VC_SUBSITE_ID,
+                    subsite_id=project_id,
                     publish=publish,
                 )
                 if result:
@@ -676,10 +724,11 @@ def api_publish():
         if not config.VC_TOKEN:
             return jsonify({"ok": False, "error": "VC_TOKEN не задан в переменных окружения"})
 
+        project_id = body.get("project_id") or config.VC_SUBSITE_ID
         photos = pick_photos(config.PHOTOS_DIR, count=config.PHOTOS_PER_ARTICLE)
         pub = VcPublisher(token=config.VC_TOKEN, base_url=config.VC_BASE_URL)
         result = pub.publish_article(article=article, image_paths=photos,
-                                     subsite_id=config.VC_SUBSITE_ID, publish=True)
+                                     subsite_id=project_id, publish=True)
         if result:
             url = result.get("url") or f"https://vc.ru/id/{result.get('id','?')}"
             return jsonify({"ok": True, "url": url})
@@ -691,10 +740,35 @@ def api_publish():
 @app.route("/api/check_vc")
 def api_check_vc():
     if not config.VC_TOKEN:
-        return jsonify({"ok": False, "error": "VC_TOKEN не задан в переменных окружения Railway"})
+        return jsonify({"ok": False, "error": "VC_TOKEN не задан в переменных окружения"})
     pub = VcPublisher(token=config.VC_TOKEN, base_url=config.VC_BASE_URL)
     result = pub.check_token()
     return jsonify(result)
+
+
+@app.route("/api/projects")
+def api_projects():
+    """Возвращает список проектов/блогов пользователя на VC.RU."""
+    if not config.VC_TOKEN:
+        return jsonify({"ok": False, "error": "VC_TOKEN не задан", "projects": []})
+    pub = VcPublisher(token=config.VC_TOKEN, base_url=config.VC_BASE_URL)
+    # Личный блог — это сам пользователь
+    me = pub.get_me()
+    projects = []
+    if me and me.get("id"):
+        projects.append({
+            "id": me["id"],
+            "name": me.get("name") or me.get("login") or "Личный блог",
+            "type": "personal",
+        })
+    # Дополнительные проекты/компании
+    subsites = pub.get_subsites()
+    for s in subsites:
+        sid = s.get("id")
+        sname = s.get("name") or s.get("title") or str(sid)
+        if sid and sid != (me or {}).get("id"):
+            projects.append({"id": sid, "name": sname, "type": "subsite"})
+    return jsonify({"ok": bool(projects), "projects": projects})
 
 
 @app.route("/manifest.json")

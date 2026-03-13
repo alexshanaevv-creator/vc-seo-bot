@@ -189,6 +189,11 @@ TEMPLATE = """<!DOCTYPE html>
         <label>Доп. контекст (необязательно)</label>
         <textarea id="description" placeholder="Что важно упомянуть, акценты..."></textarea>
 
+        <label>Проект на VC.RU</label>
+        <select id="project_id" style="margin-bottom:0;">
+          <option value="">⏳ Загрузка проектов...</option>
+        </select>
+
         <label>Режим публикации</label>
         <select id="publish_mode">
           <option value="draft">Сохранить как черновик на VC.RU</option>
@@ -330,6 +335,8 @@ async function generateArticle() {
   const mode = document.getElementById('publish_mode').value;
   const publish = mode === 'publish';
   const localOnly = mode === 'local';
+  const projectSel = document.getElementById('project_id');
+  const subsiteId = projectSel.value ? parseInt(projectSel.value) : null;
 
   document.getElementById('genBtn').disabled = true;
   showProgress('Отправляем запрос к Claude AI...');
@@ -342,6 +349,7 @@ async function generateArticle() {
       description: document.getElementById('description').value,
       publish,
       local_only: localOnly,
+      subsite_id: subsiteId,
     })
   });
   const data = await res.json();
@@ -421,11 +429,13 @@ function openHtml() {
 
 async function publishCurrent() {
   if (!currentArticle) return;
+  const projectSel = document.getElementById('project_id');
+  const subsiteId = projectSel.value ? parseInt(projectSel.value) : null;
   showToast('🚀 Публикуем на VC.RU...');
   const res = await fetch('/api/publish', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ filename: currentArticle.filename })
+    body: JSON.stringify({ filename: currentArticle.filename, subsite_id: subsiteId })
   });
   const data = await res.json();
   if (data.ok) showToast('✅ Опубликовано: ' + (data.url || ''), 5000);
@@ -470,8 +480,28 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
 
+// ─── Projects ─────────────────────────────────────────────────────────────
+
+async function loadProjects() {
+  const sel = document.getElementById('project_id');
+  try {
+    const res = await fetch('/api/projects');
+    const data = await res.json();
+    if (data.ok && data.projects && data.projects.length) {
+      sel.innerHTML = data.projects.map(p =>
+        `<option value="${p.id === null ? '' : p.id}">${p.name}</option>`
+      ).join('');
+    } else {
+      sel.innerHTML = '<option value="">Личный блог (по умолчанию)</option>';
+    }
+  } catch {
+    sel.innerHTML = '<option value="">Личный блог (по умолчанию)</option>';
+  }
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────
 loadArticles();
+loadProjects();
 </script>
 </body>
 </html>"""
@@ -619,6 +649,7 @@ p{{margin:.8em 0}}ul{{margin:.5em 0 1em 1.5em}}.meta{{color:#888;font-size:.9em;
             # Публикуем если нужно
             publish = body.get("publish", False)
             local_only = body.get("local_only", False)
+            subsite_id = body.get("subsite_id") or config.VC_SUBSITE_ID
             entry_url = None
 
             if not local_only:
@@ -627,7 +658,7 @@ p{{margin:.8em 0}}ul{{margin:.5em 0 1em 1.5em}}.meta{{color:#888;font-size:.9em;
                 result = pub.publish_article(
                     article=article,
                     image_paths=photos,
-                    subsite_id=config.VC_SUBSITE_ID,
+                    subsite_id=subsite_id,
                     publish=publish,
                 )
                 if result:
@@ -676,16 +707,26 @@ def api_publish():
         if not config.VC_TOKEN:
             return jsonify({"ok": False, "error": "VC_TOKEN не задан в переменных окружения"})
 
+        subsite_id = body.get("subsite_id") or config.VC_SUBSITE_ID
         photos = pick_photos(config.PHOTOS_DIR, count=config.PHOTOS_PER_ARTICLE)
         pub = VcPublisher(token=config.VC_TOKEN, base_url=config.VC_BASE_URL)
         result = pub.publish_article(article=article, image_paths=photos,
-                                     subsite_id=config.VC_SUBSITE_ID, publish=True)
+                                     subsite_id=subsite_id, publish=True)
         if result:
             url = result.get("url") or f"https://vc.ru/id/{result.get('id','?')}"
             return jsonify({"ok": True, "url": url})
         return jsonify({"ok": False, "error": "Ошибка публикации — нет данных в ответе"})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
+
+
+@app.route("/api/projects")
+def api_projects():
+    if not config.VC_TOKEN:
+        return jsonify({"ok": False, "error": "VC_TOKEN не задан", "projects": []})
+    pub = VcPublisher(token=config.VC_TOKEN, base_url=config.VC_BASE_URL)
+    projects = pub.get_projects()
+    return jsonify({"ok": True, "projects": projects})
 
 
 @app.route("/api/check_vc")

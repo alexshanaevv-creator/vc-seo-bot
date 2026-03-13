@@ -230,3 +230,61 @@ class VcPublisher:
             if hasattr(e, "response") and e.response is not None:
                 api_response = e.response.text[:300]
             return {"ok": False, "error": f"{e}" + (f" | {api_response}" if api_response else "")}
+
+    def get_projects(self) -> list[dict]:
+        """
+        Возвращает список проектов (субсайтов) пользователя на VC.RU.
+        Каждый элемент: {'id': int|None, 'name': str, 'url': str}
+        """
+        try:
+            resp = self.session.get(f"{self.base_url}/auth/me", timeout=15)
+            resp.raise_for_status()
+            data = resp.json()
+            user = data.get("result", {})
+            user_id = user.get("id")
+        except Exception as e:
+            logger.error(f"get_projects: auth/me failed: {e}")
+            return []
+
+        projects = []
+
+        # Личный блог всегда присутствует
+        personal_name = user.get("name") or user.get("login") or "Личный блог"
+        projects.append({
+            "id": None,
+            "name": f"{personal_name} (личный блог)",
+            "url": user.get("url", ""),
+        })
+
+        # Пробуем получить субсайты/компании пользователя
+        if user_id:
+            for endpoint in [
+                f"/user/{user_id}/subsite",
+                f"/subsite/list",
+                f"/user/{user_id}/companies",
+            ]:
+                try:
+                    resp = self.session.get(f"{self.base_url}{endpoint}", timeout=15)
+                    if resp.status_code == 200:
+                        sdata = resp.json()
+                        items = (
+                            sdata.get("result", {}).get("items")
+                            or sdata.get("result")
+                            or sdata.get("items")
+                            or []
+                        )
+                        if isinstance(items, list):
+                            for item in items:
+                                site_id = item.get("id")
+                                if site_id and site_id != user_id:
+                                    projects.append({
+                                        "id": site_id,
+                                        "name": item.get("name") or item.get("title") or f"Проект #{site_id}",
+                                        "url": item.get("url", ""),
+                                    })
+                            break
+                except Exception as e:
+                    logger.debug(f"get_projects: {endpoint} failed: {e}")
+                    continue
+
+        return projects
